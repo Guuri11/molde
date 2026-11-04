@@ -1,0 +1,15 @@
+[package]
+name = "molde-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "molde"
+path = "src/main.rs"
+
+[dependencies]
+molde-core = { path = "../molde-core" }
+molde-syntax = { path = "../molde-syntax" }
+molde-store = { path = "../molde-store" }
+molde-lsp = { path = "../molde-lsp" }
+tokio = { version = "1", features = ["rt-multi-thread"] }

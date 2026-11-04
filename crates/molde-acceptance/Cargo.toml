@@ -1,0 +1,26 @@
+[package]
+name = "molde-acceptance"
+version.workspace = true
+edition.workspace = true
+publish = false
+autotests = false
+
+[dependencies]
+molde-core = { path = "../molde-core" }
+
+[dev-dependencies]
+molde-syntax = { path = "../molde-syntax" }
+molde-store = { path = "../molde-store" }
+molde-lsp = { path = "../molde-lsp" }
+molde-cli = { path = "../molde-cli" }
+cucumber = "0.23"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util", "sync", "time"] }
+tower-lsp-server = "0.23"
+serde_json = "1"
+tempfile = "3"
+rusqlite = "0.37"
+tree-sitter-go = "0.25"
+
+[[test]]
+name = "acceptance"
+harness = false

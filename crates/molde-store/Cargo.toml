@@ -1,0 +1,10 @@
+[package]
+name = "molde-store"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+molde-core = { path = "../molde-core" }
+serde_json = { version = "1", features = ["preserve_order"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+ignore = "0.4"

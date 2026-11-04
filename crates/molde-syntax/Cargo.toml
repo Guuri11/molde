@@ -1,0 +1,11 @@
+[package]
+name = "molde-syntax"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+molde-core = { path = "../molde-core" }
+tree-sitter = "0.27"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+tree-sitter-python = "0.25"

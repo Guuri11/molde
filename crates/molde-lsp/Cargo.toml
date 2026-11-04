@@ -1,0 +1,12 @@
+[package]
+name = "molde-lsp"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+molde-core = { path = "../molde-core" }
+molde-syntax = { path = "../molde-syntax" }
+molde-store = { path = "../molde-store" }
+tower-lsp-server = "0.23"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
+serde_json = "1"
