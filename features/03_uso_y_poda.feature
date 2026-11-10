@@ -66,6 +66,14 @@ Característica: Medir el uso y podar la colección
       Y puedo crearlo con la misma generalización que usa la captura
 
     @hito6
+    Escenario: El informe enseña los 20 candidatos con más apariciones
+      Dados 25 patrones repetidos sin snippet, cada uno un número de veces distinto
+      Cuando ejecuto "molde candidates"
+      Entonces el informe enseña 20 candidatos, de más a menos apariciones
+      Y al final dice que hay 25 en total
+      # En un proyecto real salen más de 1700: la ADR 0013 explica el corte
+
+    @hito6
     Escenario: Ignora lo trivial y lo que no es código del proyecto
       Dados patrones repetidos de menos de 5 líneas
       Y ficheros ignorados por ".gitignore", como "target", "node_modules" o "dist"

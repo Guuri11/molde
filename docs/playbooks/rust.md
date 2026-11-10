@@ -112,6 +112,8 @@ Por ejemplo, al capturar un struct `Invoice` con su `NewInvoiceProps` y su `impl
 
 Si un término se convierte en hueco y no quieres, añádelo a `common_words` en `.molde/molde.toml`.
 
+Con `MOLDE_CAPTURE_COMMAND`, el snippet lo escribe una IA: ella elige los huecos, quita lo concreto y pone clave, prefijo y descripción, así que `common_words` y los huecos de literales no se aplican. Los imports que recibe son los de esta lista. Cómo configurarla, en [Que el snippet lo escriba una IA](../guia/empezar-con-molde.md#que-el-snippet-lo-escriba-una-ia).
+
 ## Generar una feature en un solo crate
 
 Usa esta plantilla si cada feature es un módulo dentro de `src/features/`.

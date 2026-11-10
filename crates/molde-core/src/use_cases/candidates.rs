@@ -149,6 +149,10 @@ fn subsumed(
     })
 }
 
+/// Los que caben en una revisión: en un proyecto real salen más de mil.
+pub const MAX_SHOWN: usize = 20;
+
+/// El informe con los `MAX_SHOWN` primeros, que ya vienen de más a menos apariciones.
 pub fn candidates_markdown(candidates: &[Candidate]) -> String {
     let mut out = String::from("# molde candidates\n\n");
     if candidates.is_empty() {
@@ -156,7 +160,7 @@ pub fn candidates_markdown(candidates: &[Candidate]) -> String {
             "Sin candidatos: no hay patrones de {MIN_LINES} o más líneas repetidos {MIN_REPEATS} o más veces sin un snippet que los cubra.\n"
         ));
     }
-    for (i, c) in candidates.iter().enumerate() {
+    for (i, c) in candidates.iter().take(MAX_SHOWN).enumerate() {
         out.push_str(&format!(
             "## {}. {}, {} apariciones de {} líneas\n\n",
             i + 1,
@@ -173,6 +177,12 @@ pub fn candidates_markdown(candidates: &[Candidate]) -> String {
             ));
         }
         out.push('\n');
+    }
+    if candidates.len() > MAX_SHOWN {
+        out.push_str(&format!(
+            "Se muestran los {MAX_SHOWN} con más apariciones de {} candidatos. `molde candidates --save N` guarda el N.\n",
+            candidates.len()
+        ));
     }
     out
 }

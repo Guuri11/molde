@@ -1,16 +1,20 @@
 //! Adaptador LSP.
 
 use molde_core::{
-    CompletionRequest, Engine, Layer, Notice, ScaffoldError, SnippetId, candidates_markdown,
-    stats_markdown,
+    Assistant, CompletionRequest, Engine, Layer, Notice, ScaffoldError, SnippetId,
+    candidates_markdown, stats_markdown,
 };
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 use tower_lsp_server::jsonrpc::Result;
 use tower_lsp_server::ls_types::*;
-use tower_lsp_server::{Client, ClientSocket, LanguageServer, LspService, Server};
+use tower_lsp_server::{
+    Client, ClientSocket, LanguageServer, LspService, NotCancellable, OngoingProgress, Server,
+    Unbounded,
+};
 
 /// Comandos que el servidor declara al iniciar. Zed solo ejecuta los declarados.
 pub const COMMANDS: [&str; 5] = [
@@ -39,7 +43,14 @@ struct Doc {
 struct State {
     utf8: bool,
     root: Option<PathBuf>,
+    /// El cliente admite `window/workDoneProgress/create`.
+    progress: bool,
 }
+
+/// Tokens de progreso únicos en la sesión.
+static NEXT_PROGRESS: AtomicI32 = AtomicI32::new(1);
+
+type CommandResult = std::result::Result<(Option<(PathBuf, u32)>, Vec<Notice>), String>;
 
 pub fn service(engine: Engine) -> (LspService<Backend>, ClientSocket) {
     LspService::new(move |client| Backend {
@@ -136,12 +147,65 @@ impl Backend {
         let _ = self.client.show_document(params).await;
     }
 
-    /// Ejecuta un comando y devuelve el fichero que hay que abrir, si lo hay.
-    fn run(
+    /// La captura pregunta a la IA, si la hay, sin el motor bloqueado: la completion sigue respondiendo.
+    async fn capture(&self, args: &[Value]) -> CommandResult {
+        let uri: Uri = args
+            .first()
+            .and_then(Value::as_str)
+            .ok_or("molde.capture: falta el documento")?
+            .parse()
+            .map_err(|_| "molde.capture: uri inválida")?;
+        let line = |i: usize| args.get(i).and_then(Value::as_u64).unwrap_or(0) as usize;
+        let path = file_path(&uri).ok_or("molde.capture: el documento no es un fichero")?;
+        let (draft, assistant) = {
+            let docs = lock(&self.docs);
+            let doc = docs
+                .get(&uri)
+                .ok_or("molde.capture: el documento no está abierto")?;
+            let engine = lock(&self.engine);
+            let draft =
+                engine.prepare_capture(&path, &doc.language, &doc.text, line(1), line(2))?;
+            (draft, engine.assistant())
+        };
+        let Some(assistant) = assistant else {
+            let c = lock(&self.engine).finish_capture(draft, None)?;
+            return Ok((Some((c.file, c.line)), c.notices));
+        };
+        let progress = self.begin_progress("generando el snippet con IA").await;
+        let prompt = draft.prompt.clone();
+        let answer = ask(assistant, prompt).await;
+        let captured = lock(&self.engine).finish_capture(draft, Some(answer));
+        if let Some(p) = progress {
+            p.finish().await;
+        }
+        let c = captured?;
+        Ok((Some((c.file, c.line)), c.notices))
+    }
+
+    async fn begin_progress(
         &self,
-        command: &str,
-        args: &[Value],
-    ) -> std::result::Result<(Option<(PathBuf, u32)>, Vec<Notice>), String> {
+        message: &str,
+    ) -> Option<OngoingProgress<Unbounded, NotCancellable>> {
+        let supported = lock(&self.state).progress;
+        if !supported {
+            return None;
+        }
+        let token = ProgressToken::Number(NEXT_PROGRESS.fetch_add(1, Ordering::Relaxed));
+        self.client
+            .create_work_done_progress(token.clone())
+            .await
+            .ok()?;
+        Some(
+            self.client
+                .progress(token, "molde")
+                .with_message(message)
+                .begin()
+                .await,
+        )
+    }
+
+    /// Ejecuta un comando y devuelve el fichero que hay que abrir, si lo hay.
+    fn run(&self, command: &str, args: &[Value]) -> CommandResult {
         let arg = |i: usize| args.get(i).and_then(Value::as_str).map(str::to_string);
         match command {
             "molde.recordUse" => {
@@ -162,29 +226,6 @@ impl Backend {
                 };
                 lock(&self.engine).record_use(id, field("root"))?;
                 Ok((None, Vec::new()))
-            }
-            "molde.capture" => {
-                let uri: Uri = arg(0)
-                    .ok_or("molde.capture: falta el documento")?
-                    .parse()
-                    .map_err(|_| "molde.capture: uri inválida")?;
-                let (first, last) = (
-                    args.get(1).and_then(Value::as_u64).unwrap_or(0),
-                    args.get(2).and_then(Value::as_u64).unwrap_or(0),
-                );
-                let path = file_path(&uri).ok_or("molde.capture: el documento no es un fichero")?;
-                let docs = lock(&self.docs);
-                let doc = docs
-                    .get(&uri)
-                    .ok_or("molde.capture: el documento no está abierto")?;
-                let c = lock(&self.engine).capture(
-                    &path,
-                    &doc.language,
-                    &doc.text,
-                    first as usize,
-                    last as usize,
-                )?;
-                Ok((Some((c.file, c.line)), Vec::new()))
             }
             "molde.stats" => {
                 let root = self.root()?;
@@ -220,6 +261,13 @@ impl Backend {
     }
 }
 
+/// La IA puede tardar segundos: en un hilo aparte, para no parar el servidor.
+async fn ask(assistant: Arc<dyn Assistant>, prompt: String) -> std::result::Result<String, String> {
+    tokio::task::spawn_blocking(move || assistant.ask(&prompt))
+        .await
+        .unwrap_or_else(|e| Err(format!("la IA ha fallado: {e}")))
+}
+
 /// Escribe un informe en Markdown en un fichero temporal propio.
 fn report(kind: &str, markdown: &str) -> std::result::Result<PathBuf, String> {
     let nanos = std::time::SystemTime::now()
@@ -245,7 +293,17 @@ impl LanguageServer for Backend {
             .and_then(|f| f.first())
             .and_then(|f| file_path(&f.uri))
             .or_else(|| params.root_uri.as_ref().and_then(file_path));
-        *lock(&self.state) = State { utf8, root };
+        let progress = params
+            .capabilities
+            .window
+            .as_ref()
+            .and_then(|w| w.work_done_progress)
+            .unwrap_or(false);
+        *lock(&self.state) = State {
+            utf8,
+            root,
+            progress,
+        };
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 position_encoding: Some(if utf8 {
@@ -369,7 +427,12 @@ impl LanguageServer for Backend {
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<LSPAny>> {
-        match self.run(&params.command, &params.arguments) {
+        let result = if params.command == "molde.capture" {
+            self.capture(&params.arguments).await
+        } else {
+            self.run(&params.command, &params.arguments)
+        };
+        match result {
             Ok((open, notices)) => {
                 self.notify(notices).await;
                 if let Some((path, line)) = open {

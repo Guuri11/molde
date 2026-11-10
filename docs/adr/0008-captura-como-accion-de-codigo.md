@@ -1,7 +1,7 @@
 # 0008. La captura es una acción de código que se revisa en el fichero
 
 Fecha: 4 de noviembre de 2026
-Estado: aceptada
+Estado: aceptada, ampliada por [0012](0012-captura-con-ia-por-comando.md)
 
 ## Contexto
 

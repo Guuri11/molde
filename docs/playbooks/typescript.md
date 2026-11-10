@@ -110,6 +110,8 @@ En TypeScript:
 
 Los alias de ruta como `@/lib/db` no empiezan por `.` y molde los copia. Si tu proyecto los usa, comprueba que tengan sentido antes de mover el snippet a la capa de usuario.
 
+Con `MOLDE_CAPTURE_COMMAND`, el snippet lo escribe una IA: ella elige los huecos, quita lo concreto y pone clave, prefijo y descripción, así que `common_words` y los huecos de literales no se aplican. Los imports que recibe son los de esta lista. Cómo configurarla, en [Que el snippet lo escriba una IA](../guia/empezar-con-molde.md#que-el-snippet-lo-escriba-una-ia).
+
 ## Generar un módulo con scaffold
 
 1. Elige un módulo que funcione y pase sus tests y llámalo `sample-widget`. Usa ese nombre en todas sus formas: `SampleWidget`, `sampleWidget`, `SAMPLE_WIDGET`, `sample-widgets`.

@@ -1,4 +1,5 @@
-//! Lo que el núcleo necesita del exterior: SnippetRepository, UsageStore, SyntaxAnalyzer, Clock, FileSystem y Shell.
+//! Lo que el núcleo necesita del exterior: SnippetRepository, UsageStore, SyntaxAnalyzer, Clock,
+//! FileSystem, Shell y Assistant.
 
 use crate::domain::*;
 use std::path::{Path, PathBuf};
@@ -18,6 +19,9 @@ pub trait SnippetRepository: Send {
     fn load(&self, path: &Path) -> Result<Option<Vec<Snippet>>, SnippetFileError>;
     /// Añade la entrada al final del fichero, creándolo si hace falta. Devuelve su línea, desde 0.
     fn append(&self, path: &Path, snippet: &Snippet) -> Result<u32, String>;
+    /// El primer objeto de un texto como entrada suelta, con la clave en el campo `key`:
+    /// lo que responde la IA. El prefijo puede quedar vacío.
+    fn parse_entry(&self, text: &str) -> Result<Snippet, String>;
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -50,6 +54,8 @@ pub trait SyntaxAnalyzer: Send {
     ) -> Result<Vec<Requirement>, String>;
     fn tokens(&self, language: &str, text: &str) -> Vec<Token>;
     fn fragments(&self, language: &str, text: &str, min_lines: usize) -> Vec<Fragment>;
+    /// Tipos de nodo que pueden ir en `context`: los de `containers.scm`.
+    fn containers(&self, language: &str) -> Vec<String>;
 }
 
 pub trait Clock: Send {
@@ -71,4 +77,10 @@ pub trait FileSystem: Send {
 pub trait Shell: Send {
     /// Ejecuta con `sh -c` en `cwd`. Devuelve si ha ido bien y la salida combinada.
     fn run(&self, command: &str, cwd: &Path) -> (bool, String);
+}
+
+/// La IA que escribe los snippets capturados. Puede tardar segundos: no se llama con el motor bloqueado.
+pub trait Assistant: Send + Sync {
+    /// La respuesta a `prompt`, o por qué no la hay.
+    fn ask(&self, prompt: &str) -> Result<String, String>;
 }

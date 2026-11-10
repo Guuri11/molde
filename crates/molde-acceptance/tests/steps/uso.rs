@@ -368,3 +368,48 @@ async fn shown_on_demand(w: &mut MoldeWorld) {
         );
     }
 }
+
+#[given(regex = r"^(\d+) patrones repetidos sin snippet, cada uno un número de veces distinto$")]
+async fn many_patterns(w: &mut MoldeWorld, n: usize) {
+    // El patrón p tiene 5 + p sentencias y se repite 3 + p veces: estructuras y recuentos distintos.
+    for p in 0..n {
+        let functions: Vec<String> = (0..3 + p)
+            .map(|r| {
+                let body: String = (0..5 + p)
+                    .map(|k| format!("    v{k} = x + {k}\n"))
+                    .collect();
+                format!("def f_{p}_{r}(x):\n{body}")
+            })
+            .collect();
+        w.write(&format!("app/patron_{p}.py"), &functions.join("\n\n"));
+    }
+}
+
+/// Apariciones de cada candidato del informe, en orden.
+fn counts(out: &str) -> Vec<usize> {
+    out.lines()
+        .filter_map(|l| l.strip_prefix("## "))
+        .map(|h| {
+            h.split(", ")
+                .nth(1)
+                .unwrap()
+                .split(' ')
+                .next()
+                .unwrap()
+                .parse()
+                .unwrap()
+        })
+        .collect()
+}
+
+#[then(regex = r"^el informe enseña (\d+) candidatos, de más a menos apariciones$")]
+async fn shows_top(w: &mut MoldeWorld, n: usize) {
+    let expected: Vec<usize> = (0..n).map(|i| 27 - i).collect();
+    assert_eq!(counts(&w.cli.1), expected, "{}", w.cli.1);
+}
+
+#[then(regex = r"^al final dice que hay (\d+) en total$")]
+async fn says_total(w: &mut MoldeWorld, total: usize) {
+    let last = w.cli.1.trim_end().lines().last().unwrap();
+    assert!(last.contains(&format!("de {total} candidatos")), "{last}");
+}

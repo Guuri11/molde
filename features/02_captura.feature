@@ -111,3 +111,106 @@ Característica: Capturar código como snippet
       Cuando molde intenta recargarlo
       Entonces sigue usando la última versión válida de ese fichero
       Y muestra un aviso con el fichero y la línea del error
+
+  Regla: Con una IA configurada, la IA escribe el snippet y molde lo valida
+    La IA se configura con la variable de entorno MOLDE_CAPTURE_COMMAND: un comando que lee
+    el prompt por la entrada estándar y escribe la respuesta por la salida estándar.
+    Sin la variable, la captura funciona como dicen las reglas anteriores.
+
+    @hito8
+    Escenario: La IA escribe el snippet entero, limpio
+      Dado MOLDE_CAPTURE_COMMAND con una IA que responde:
+        """
+        {
+          "key": "axum-get-by-id",
+          "prefix": "axum handler get by id",
+          "description": "Handler GET por id con servicio y DTO",
+          "body": [
+            "pub async fn get_${1:invoice}(",
+            "    State(svc): State<Arc<${2:Invoice}Service>>,",
+            "    Path(id): Path<Uuid>,",
+            ") -> Result<Json<${2}Dto>, ApiError> {",
+            "    Ok(Json(svc.find(id).await?.into()))",
+            "\\}$0"
+          ],
+          "requires": ["use std::sync::Arc;", "use uuid::Uuid;"],
+          "context": ["source_file", "mod_item"]
+        }
+        """
+      Y la selección de Rust:
+        """
+        pub async fn get_invoice(
+            State(svc): State<Arc<InvoiceService>>,
+            Path(id): Path<Uuid>,
+        ) -> Result<Json<InvoiceDto>, ApiError> {
+            let invoice = svc.find(id).await?;
+            Ok(Json(invoice.into()))
+        }
+        """
+      Cuando la guardo como snippet
+      Entonces la entrada nueva es "axum-get-by-id" con el prefijo, la descripción, el cuerpo, "requires" y "context" que ha respondido la IA
+      # La IA puede cambiar el código para dejarlo limpio: aquí junta el find y el Ok en una línea
+
+    @hito8
+    Escenario: Un import o un contexto inválidos se descartan sin perder el resto
+      Dado MOLDE_CAPTURE_COMMAND con una IA que responde un snippet válido con el import "use serde::{" y el contexto "class_body"
+      Cuando guardo una selección de Rust como snippet
+      Entonces la entrada se guarda con el cuerpo que ha respondido la IA
+      Pero "requires" no contiene "use serde::{"
+      Y "context" no contiene "class_body", que no es un contenedor de Rust
+      Y molde muestra un aviso con lo que ha descartado
+
+    @hito8
+    Escenario: Una clave ocupada o inválida se sustituye por la provisional
+      Dado ".molde/snippets/rust.json" con la clave "axum-get-by-id"
+      Y MOLDE_CAPTURE_COMMAND con una IA que responde la clave "axum-get-by-id"
+      Cuando guardo una selección de Rust como snippet
+      Entonces la entrada nueva tiene la clave "captura-1"
+      Y la entrada "axum-get-by-id" que ya existía no cambia
+      Cuando la IA responde la clave "Get By Id!"
+      Entonces la entrada nueva también tiene una clave "captura-N"
+
+    @hito8
+    Escenario: Se acepta texto alrededor del JSON
+      Dado MOLDE_CAPTURE_COMMAND con una IA que responde:
+        """
+        Aquí tienes el snippet:
+        ```json
+        {"key": "health-check", "prefix": "health check", "description": "", "body": ["assert client.get(\"${1:/health}\").status_code == 200$0"], "requires": []}
+        ```
+        """
+      Cuando guardo una selección de Python como snippet
+      Entonces la entrada nueva tiene la clave "health-check"
+
+    @hito8
+    Esquema del escenario: Si la IA falla, la captura no se pierde
+      Dado MOLDE_CAPTURE_COMMAND con una IA que <fallo>
+      Cuando guardo una selección de Rust como snippet
+      Entonces la entrada se guarda con la generalización por regla y la clave "captura-1"
+      Y molde muestra un aviso con el motivo
+      Y molde pide al editor que abra el fichero en esa entrada
+
+      Ejemplos:
+        | fallo                                                        |
+        | no existe                                                    |
+        | termina con código de salida 1                               |
+        | tarda más que MOLDE_CAPTURE_TIMEOUT                          |
+        | responde un texto sin ningún objeto JSON                     |
+        | responde un JSON sin "body"                                  |
+        | responde un cuerpo con un placeholder sin cerrar             |
+
+    @hito8
+    Escenario: La IA solo recibe la selección
+      Dado MOLDE_CAPTURE_COMMAND con una IA que guarda lo que recibe y la carpeta donde se ejecuta
+      Y un fichero Rust de 200 líneas con 6 imports
+      Cuando guardo como snippet 5 líneas que usan 2 de esos imports
+      Entonces la IA ha recibido el lenguaje, esas 5 líneas y esos 2 imports
+      Pero ninguna otra línea del fichero
+      Y el comando se ha ejecutado en una carpeta temporal vacía, fuera del proyecto
+
+    @hito8
+    Escenario: Mientras la IA responde, el servidor sigue trabajando
+      Dado MOLDE_CAPTURE_COMMAND con una IA que tarda 2 segundos en responder
+      Cuando guardo una selección de Rust como snippet
+      Entonces el editor recibe un progreso de molde hasta que la entrada está guardada
+      Y una completion pedida durante la espera responde sin esperar a la IA

@@ -53,6 +53,12 @@ Característica: Hoja de ruta de molde
     Entonces compila a la primera y queda registrada en el proyecto
     Y pasan todos los escenarios @hito7
 
+  Escenario: Hito 8, captura con IA
+    Cuando configuro MOLDE_CAPTURE_COMMAND con Claude Code, Copilot CLI u OpenCode
+    Y guardo como snippet un caso de uso real de un proyecto
+    Entonces la entrada sale limpia, con nombre, prefijo, descripción y huecos que no hace falta corregir
+    Y pasan todos los escenarios @hito8
+
   Escenario: Lo marcado como futuro
     Dados los escenarios etiquetados @futuro
     Entonces se abordan solo si el uso real demuestra que hacen falta

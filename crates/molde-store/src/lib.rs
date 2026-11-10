@@ -1,4 +1,4 @@
-//! Snippets en VSCode JSON y uso en SQLite, más los adaptadores de ficheros, comandos y reloj.
+//! Snippets en VSCode JSON y uso en SQLite, más los adaptadores de ficheros, comandos, IA y reloj.
 
 use molde_core::*;
 use rusqlite::{Connection, params};
@@ -6,7 +6,7 @@ use serde_json::{Map, Value};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Ficheros `<lenguaje>.json` con el formato de VSCode más `requires` y `context`.
 /// Admite comentarios y comas finales, como VSCode.
@@ -70,6 +70,27 @@ impl SnippetRepository for JsonSnippets {
         }
         std::fs::write(path, content).map_err(|e| format!("{}: {e}", path.display()))?;
         Ok(line)
+    }
+
+    fn parse_entry(&self, text: &str) -> Result<Snippet, String> {
+        // El primer `{` desde el que empieza un objeto JSON: la IA puede añadir texto alrededor.
+        let mut first_error = None;
+        let value = text
+            .match_indices('{')
+            .find_map(|(i, _)| {
+                let parsed = serde_json::Deserializer::from_str(&text[i..])
+                    .into_iter::<Value>()
+                    .next()?;
+                parsed
+                    .map_err(|e| first_error.get_or_insert(e.to_string()).clone())
+                    .ok()
+            })
+            .ok_or_else(|| match first_error {
+                Some(e) => format!("el JSON no es válido: {e}"),
+                None => "la respuesta no tiene ningún objeto JSON".to_string(),
+            })?;
+        let key = value.get("key").and_then(Value::as_str).unwrap_or_default();
+        fields(key, &value)
     }
 }
 
@@ -170,13 +191,19 @@ fn strings(o: &Map<String, Value>, field: &str) -> Result<Option<Vec<String>>, S
 }
 
 fn to_snippet(key: &str, value: &Value) -> Result<Snippet, String> {
+    let s = fields(key, value)?;
+    if s.prefixes.is_empty() {
+        return Err("falta \"prefix\"".into());
+    }
+    Ok(s)
+}
+
+/// Los campos de una entrada, sin exigir el prefijo.
+fn fields(key: &str, value: &Value) -> Result<Snippet, String> {
     let o = value.as_object().ok_or("debe ser un objeto")?;
-    let prefixes = strings(o, "prefix")?
-        .filter(|p| !p.is_empty())
-        .ok_or("falta \"prefix\"")?;
     Ok(Snippet {
         key: key.to_string(),
-        prefixes,
+        prefixes: strings(o, "prefix")?.unwrap_or_default(),
         description: strings(o, "description")?.unwrap_or_default().join("\n"),
         body: strings(o, "body")?.ok_or("falta \"body\"")?.join("\n"),
         requires: strings(o, "requires")?.unwrap_or_default(),
@@ -367,6 +394,105 @@ impl Shell for StdShell {
             Err(e) => (false, e.to_string()),
         }
     }
+}
+
+/// La IA de `MOLDE_CAPTURE_COMMAND`: el prompt entra por la entrada estándar y la respuesta sale
+/// por la salida estándar. molde no sabe qué IA hay detrás.
+pub struct CommandAssistant {
+    pub command: String,
+    pub timeout: Duration,
+}
+
+impl CommandAssistant {
+    /// None si `MOLDE_CAPTURE_COMMAND` no está o está vacía. `MOLDE_CAPTURE_TIMEOUT` va en segundos.
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Option<CommandAssistant> {
+        let command = var("MOLDE_CAPTURE_COMMAND").filter(|c| !c.trim().is_empty())?;
+        let secs = var("MOLDE_CAPTURE_TIMEOUT")
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or(120);
+        Some(CommandAssistant {
+            command,
+            timeout: Duration::from_secs(secs),
+        })
+    }
+}
+
+impl Assistant for CommandAssistant {
+    fn ask(&self, prompt: &str) -> Result<String, String> {
+        // Carpeta vacía: un agente no carga las instrucciones del proyecto ni puede tocarlo.
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let dir = std::env::temp_dir().join(format!("molde-ia-{}-{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let result = run_with_input(&self.command, &dir, prompt, self.timeout);
+        let _ = std::fs::remove_dir_all(&dir);
+        result
+    }
+}
+
+/// `sh -c` con `input` por la entrada estándar. Devuelve la salida estándar si termina bien a tiempo.
+fn run_with_input(
+    command: &str,
+    cwd: &Path,
+    input: &str,
+    timeout: Duration,
+) -> Result<String, String> {
+    use std::io::{Read, Write};
+    use std::os::unix::process::CommandExt;
+    let mut child = Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .current_dir(cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        // Grupo propio, para terminar también lo que lance el comando si se pasa de tiempo.
+        .process_group(0)
+        .spawn()
+        .map_err(|e| format!("\"{command}\": {e}"))?;
+    let (mut stdin, mut stdout, mut stderr) = (
+        child.stdin.take().expect("stdin con pipe"),
+        child.stdout.take().expect("stdout con pipe"),
+        child.stderr.take().expect("stderr con pipe"),
+    );
+    // Escribir y leer en hilos: con una salida grande, el comando se bloquearía esperando.
+    let input = input.to_string();
+    std::thread::spawn(move || stdin.write_all(input.as_bytes()));
+    let out = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        let _ = stdout.read_to_end(&mut b);
+        b
+    });
+    let err = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        let _ = stderr.read_to_end(&mut b);
+        b
+    });
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+            Ok(None) => {
+                let _ = Command::new("kill")
+                    .args(["-KILL", &format!("-{}", child.id())])
+                    .status();
+                let _ = child.wait();
+                return Err(format!("no ha respondido en {} s", timeout.as_secs()));
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    };
+    if !status.success() {
+        let code = status
+            .code()
+            .map_or("una señal".to_string(), |c| format!("el código {c}"));
+        let err = String::from_utf8_lossy(&err.join().unwrap_or_default()).to_string();
+        let last = err.trim().lines().last().unwrap_or_default().to_string();
+        return Err(format!("\"{command}\" ha terminado con {code}: {last}"));
+    }
+    Ok(String::from_utf8_lossy(&out.join().unwrap_or_default()).into_owned())
 }
 
 pub struct SystemClock;

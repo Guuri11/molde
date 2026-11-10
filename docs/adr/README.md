@@ -11,10 +11,12 @@ Cada fichero recoge una decisión: el problema, lo que se decidió y lo que impl
 | [0005](0005-registro-de-usos.md) | Registro de usos con un comando y SQLite fuera del repositorio | Aceptada |
 | [0006](0006-recarga-por-fecha-y-tamano.md) | Recarga por fecha y tamaño en vez de `notify` | Aceptada |
 | [0007](0007-variantes-como-placeholders.md) | Variantes de mayúsculas como placeholders independientes | Aceptada |
-| [0008](0008-captura-como-accion-de-codigo.md) | La captura es una acción de código que se revisa en el fichero | Aceptada |
-| [0009](0009-regla-de-tres-por-estructura.md) | La regla de tres compara estructura sintáctica | Aceptada, con revisión pendiente |
+| [0008](0008-captura-como-accion-de-codigo.md) | La captura es una acción de código que se revisa en el fichero | Aceptada, ampliada por 0012 |
+| [0009](0009-regla-de-tres-por-estructura.md) | La regla de tres compara estructura sintáctica | Aceptada, revisada en 0013 |
 | [0010](0010-scaffold-desde-feature-dorada.md) | Scaffold desde una feature dorada | Aceptada |
 | [0011](0011-especificacion-ejecutable.md) | La especificación en Gherkin es la batería de aceptación | Aceptada |
+| [0012](0012-captura-con-ia-por-comando.md) | La captura puede pedir el snippet a una IA a través de un comando | Aceptada |
+| [0013](0013-informe-con-los-candidatos-mas-repetidos.md) | El informe de candidatos enseña los 20 más repetidos | Aceptada |
 
 ## Plantilla
 

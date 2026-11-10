@@ -1,10 +1,11 @@
 //! Composición de adaptadores y subcomandos de la CLI. Nunca pregunta nada: pensado también para agentes.
 
-use molde_core::{Engine, Ports, ScaffoldError, candidates_markdown, stats_markdown};
-use molde_store::{JsonSnippets, SqliteUsage, StdFs, StdShell, SystemClock};
+use molde_core::{Assistant, Engine, Ports, ScaffoldError, candidates_markdown, stats_markdown};
+use molde_store::{CommandAssistant, JsonSnippets, SqliteUsage, StdFs, StdShell, SystemClock};
 use molde_syntax::Treesitter;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 pub const USAGE: &str = "uso: molde <comando>
 
@@ -45,6 +46,8 @@ pub fn engine(paths: &Paths) -> Result<Engine, String> {
         clock: Box::new(SystemClock),
         fs: Box::new(StdFs),
         shell: Box::new(StdShell),
+        assistant: CommandAssistant::from_vars(|k| std::env::var(k).ok())
+            .map(|a| Arc::new(a) as Arc<dyn Assistant>),
     };
     Ok(Engine::new(ports, paths.user_dir.clone()))
 }

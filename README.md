@@ -6,11 +6,11 @@ La especificación está en Gherkin en español (`# language: es`) y se ejecuta 
 
 ## Estado
 
-Los hitos 0 a 7 están terminados: `cargo test` pasa todos los escenarios `@hito0` a `@hito7`. Los de `@flujo`, `@hoja-de-ruta`, `@transversal` y `@futuro` quedan sin pasos y salen como omitidos.
+Los hitos 0 a 8 están terminados: `cargo test` pasa todos los escenarios `@hito0` a `@hito8`. Los de `@flujo`, `@hoja-de-ruta`, `@transversal` y `@futuro` quedan sin pasos y salen como omitidos.
 
 El Hito 0 se ha comprobado en Neovim 0.12 con blink.cmp 1.10.2: aplica la edición adicional del import y ejecuta `molde.recordUse`.
 
-Queda pendiente el criterio del Hito 6 con un proyecto real: los primeros candidatos son útiles, pero la lista completa tiene demasiado ruido. Ver la [ADR 0009](docs/adr/0009-regla-de-tres-por-estructura.md).
+El informe de candidatos del Hito 6 enseña los 20 más repetidos ([ADR 0013](docs/adr/0013-informe-con-los-candidatos-mas-repetidos.md)). La captura con IA del Hito 8 se ha comprobado con Claude Code, Copilot CLI y OpenCode hablando con el servidor por LSP, todavía no desde Neovim ([ADR 0012](docs/adr/0012-captura-con-ia-por-comando.md)).
 
 ## Documentación
 
@@ -148,6 +148,17 @@ vim.api.nvim_create_user_command("MoldeScaffold", function(o) molde("molde.scaff
 ```
 
 La captura es una acción de código: selecciona varias líneas y usa `vim.lsp.buf.code_action()` (`<leader>ca` en LazyVim).
+
+Para que el snippet lo escriba una IA, pasa el comando al servidor con `cmd_env`. Recibe el prompt por la entrada estándar y responde por la salida estándar ([ADR 0012](docs/adr/0012-captura-con-ia-por-comando.md)):
+
+```lua
+vim.lsp.config("molde", {
+  cmd = { "molde", "lsp" },
+  cmd_env = { MOLDE_CAPTURE_COMMAND = "claude -p --model haiku" },
+  -- o "copilot -s -p \"$(cat)\"", u "opencode run -m <proveedor/modelo> \"$(cat)\""
+  -- …
+})
+```
 
 ## Ejecutar la especificación
 

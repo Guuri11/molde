@@ -214,6 +214,37 @@ El snippet ya aparece en la completion.
 
 > Si quieres el snippet en todos tus proyectos, mueve la entrada a `~/.config/molde/snippets/<lenguaje>.json`. La captura siempre guarda en el proyecto.
 
+### Que el snippet lo escriba una IA
+
+Con la variable `MOLDE_CAPTURE_COMMAND`, molde le pasa la selección a una IA y guarda lo que responde. La IA quita los logs y los comentarios, pone los huecos, la clave, el prefijo y la descripción, y deja en `requires` solo los imports que hacen falta.
+
+1. Elige el comando de tu herramienta:
+
+   | Herramienta | Comando |
+   |---|---|
+   | Claude Code | `claude -p --model haiku` |
+   | Copilot CLI | `copilot -s -p "$(cat)"` |
+   | OpenCode | `opencode run -m <proveedor/modelo> "$(cat)"` |
+
+   En OpenCode pon siempre `-m`: con el modelo gratuito por defecto no responde a tiempo.
+
+2. Pásaselo al servidor en `~/.config/nvim/lua/plugins/molde.lua`:
+
+   ```lua
+   vim.lsp.config("molde", {
+     cmd = { "molde", "lsp" },
+     cmd_env = { MOLDE_CAPTURE_COMMAND = "claude -p --model haiku" },
+     filetypes = { "rust", "typescript", "typescriptreact", "python" },
+     root_markers = { ".molde", ".git" },
+   })
+   ```
+
+3. Captura como siempre, con **Guardar selección como snippet**.
+
+La IA tarda entre 20 y 50 segundos. Mientras tanto el editor muestra el progreso de molde y la completion sigue funcionando. Si la IA falla o tarda más de `MOLDE_CAPTURE_TIMEOUT` segundos (120 por defecto), molde captura con la regla de siempre y te avisa del motivo.
+
+Revisa siempre la entrada: la IA puede cambiar el código para dejarlo limpio, y molde solo comprueba que el snippet es válido, no que sea correcto. La selección y sus imports se envían a la IA que configures.
+
 ## Paso 7: revisar la colección cada mes
 
 molde registra cada vez que aceptas un snippet. El registro está en `~/.local/share/molde/usage.sqlite`, fuera del repositorio.
@@ -234,7 +265,7 @@ Desde Neovim: `:MoldeStats`. El informe se abre en un buffer.
 molde candidates
 ```
 
-molde busca bloques de 5 o más líneas que se repiten 3 o más veces con la misma estructura y que ningún snippet cubre. Los ordena por número de apariciones.
+molde busca bloques de 5 o más líneas que se repiten 3 o más veces con la misma estructura y que ningún snippet cubre. Enseña los 20 que más se repiten y, al final, cuántos hay en total. Recorre todo el proyecto, así que en uno grande tarda unos segundos.
 
 Para guardar el candidato número 2 como snippet:
 
@@ -242,9 +273,7 @@ Para guardar el candidato número 2 como snippet:
 molde candidates --save 2
 ```
 
-Se guarda con las mismas reglas que la captura del paso 6.
-
-> En proyectos grandes la lista puede ser muy larga. Mira los primeros: son los que más se repiten.
+Se guarda igual que la captura del paso 6: si tienes `MOLDE_CAPTURE_COMMAND`, lo escribe la IA.
 
 Cuando decidas qué borrar y qué crear, súbelo en un commit.
 
@@ -330,6 +359,10 @@ El fichero de snippets tiene un error de sintaxis. molde sigue usando la última
 ### `molde stats` dice que no uso nada
 
 Tu cliente de completion no ejecuta el comando que acompaña a cada snippet. Los snippets funcionan, pero no se registran los usos.
+
+### `:MoldeCandidates` no enseña nada
+
+El análisis recorre todo el proyecto desde la carpeta `.molde` más cercana y, en un repositorio grande, tarda decenas de segundos. Mientras tanto molde no responde a nada más, tampoco a la completion. Espera a que se abra el informe o lanza `molde candidates` desde la terminal.
 
 ## Siguientes pasos
 

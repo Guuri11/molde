@@ -71,6 +71,7 @@ async fn capture_python(w: &mut MoldeWorld) {
         command["arguments"].clone(),
     )
     .await;
+    w.captured = Some(w.last_entry("python"));
 }
 
 fn entries(w: &MoldeWorld, file: &str) -> serde_json::Map<String, Value> {

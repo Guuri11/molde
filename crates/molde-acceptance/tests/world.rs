@@ -3,11 +3,12 @@
 use crate::lsp_client::{Lsp, pos, uri};
 use cucumber::World;
 use molde_core::*;
-use molde_store::{JsonSnippets, SqliteUsage, StdFs};
+use molde_store::{CommandAssistant, JsonSnippets, SqliteUsage, StdFs};
 use molde_syntax::Treesitter;
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Marca del cursor en los textos de prueba.
 pub const CURSOR: char = '‸';
@@ -48,6 +49,14 @@ pub struct MoldeWorld {
     pub cli: (i32, String, String),
     pub snapshot: BTreeMap<PathBuf, Vec<u8>>,
     pub scratch: Value,
+    /// `MOLDE_CAPTURE_COMMAND` y su límite en segundos.
+    pub ai: Option<(String, u64)>,
+    /// Carpeta de las IA falsas, fuera del proyecto.
+    pub ai_dir: PathBuf,
+    /// La IA tarda: la captura comprueba que la completion responde mientras tanto.
+    pub ai_slow: bool,
+    /// Milisegundos de la completion pedida durante la captura y si la captura seguía pendiente.
+    pub during_capture: Option<(u128, bool)>,
 }
 
 impl std::fmt::Debug for MoldeWorld {
@@ -177,6 +186,10 @@ impl MoldeWorld {
         std::fs::create_dir_all(&home).unwrap();
         std::fs::create_dir_all(&project).unwrap();
         MoldeWorld {
+            ai: None,
+            ai_dir: tmp.path().join("ia"),
+            ai_slow: false,
+            during_capture: None,
             _tmp: tmp,
             home,
             project,
@@ -232,6 +245,12 @@ impl MoldeWorld {
             clock: Box::new(FixedClock(self.now)),
             fs: Box::new(StdFs),
             shell: Box::new(PathShell(self.project.join("bin"))),
+            assistant: self.ai.as_ref().map(|(command, secs)| {
+                Arc::new(CommandAssistant {
+                    command: command.clone(),
+                    timeout: std::time::Duration::from_secs(*secs),
+                }) as Arc<dyn Assistant>
+            }),
         };
         Engine::new(ports, paths.user_dir)
     }
@@ -436,6 +455,15 @@ impl MoldeWorld {
             String::from_utf8_lossy(&out).into(),
             String::from_utf8_lossy(&err).into(),
         );
+    }
+
+    /// La última entrada de un fichero de snippets del proyecto: la que acaba de añadir la captura.
+    pub fn last_entry(&self, language: &str) -> Snippet {
+        JsonSnippets
+            .load(&self.path(&self.project_snippets(language)))
+            .expect("fichero de snippets válido")
+            .and_then(|mut s| s.pop())
+            .expect("alguna entrada")
     }
 
     pub async fn shown(&mut self) -> Vec<Value> {

@@ -28,6 +28,8 @@ struct Lang {
     extensions: Vec<String>,
     language: Language,
     containers: Query,
+    /// Tipos de nodo de `containers.scm`, para validar `context`.
+    container_kinds: Vec<String>,
     imports: Query,
     decompose: Decompose,
 }
@@ -144,6 +146,12 @@ impl Treesitter {
         imports: &str,
         decompose: Decompose,
     ) -> Result<(), String> {
+        // Cada patrón es `(tipo) @container`.
+        let container_kinds = containers
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix('(')?.split([')', ' ']).next())
+            .map(String::from)
+            .collect();
         let containers =
             Query::new(&language, containers).map_err(|e| format!("{id}/containers.scm: {e}"))?;
         let imports =
@@ -154,6 +162,7 @@ impl Treesitter {
             extensions,
             language,
             containers,
+            container_kinds,
             imports,
             decompose,
         });
@@ -347,6 +356,12 @@ fn after_line(text: &str, end: usize) -> (usize, bool) {
 }
 
 impl SyntaxAnalyzer for Treesitter {
+    fn containers(&self, language: &str) -> Vec<String> {
+        self.lang(language)
+            .map(|i| self.langs[i].container_kinds.clone())
+            .unwrap_or_default()
+    }
+
     fn supports(&self, language: &str) -> bool {
         self.lang(language).is_some()
     }

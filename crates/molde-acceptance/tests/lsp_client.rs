@@ -47,11 +47,10 @@ impl Lsp {
             utf8,
             capabilities: Value::Null,
         };
-        let caps = if utf8 {
-            json!({ "general": { "positionEncodings": ["utf-8", "utf-16"] } })
-        } else {
-            json!({})
-        };
+        let mut caps = json!({ "window": { "workDoneProgress": true } });
+        if utf8 {
+            caps["general"] = json!({ "positionEncodings": ["utf-8", "utf-16"] });
+        }
         let root_uri = uri(root);
         let res = lsp
             .request(
@@ -75,34 +74,64 @@ impl Lsp {
 
     /// Envía una petición y devuelve la respuesta completa. Contesta por el camino a las peticiones del servidor.
     pub async fn request(&mut self, method: &str, params: Value) -> Value {
+        let id = self.send_request(method, params).await;
+        self.response(id).await
+    }
+
+    /// Envía una petición sin esperar la respuesta. Devuelve su id.
+    pub async fn send_request(&mut self, method: &str, params: Value) -> i64 {
         let id = self.next;
         self.next += 1;
         self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
             .await;
+        id
+    }
+
+    /// La respuesta a `id`, aunque haya llegado mientras se esperaba otra.
+    pub async fn response(&mut self, id: i64) -> Value {
+        let is_response = |m: &Value| m.get("method").is_none() && m["id"] == id;
+        if let Some(i) = self.received.iter().position(is_response) {
+            return self.received.remove(i);
+        }
         loop {
             let msg = tokio::time::timeout(Duration::from_secs(60), self.rx.recv())
                 .await
-                .unwrap_or_else(|_| panic!("sin respuesta a {method}"))
+                .unwrap_or_else(|_| panic!("sin respuesta a la petición {id}"))
                 .expect("el servidor ha cerrado");
-            if msg.get("method").is_none() && msg["id"] == id {
+            if is_response(&msg) {
                 return msg;
             }
-            if msg.get("method").is_some() && msg.get("id").is_some() {
-                let result = if msg["method"] == "window/showDocument" {
-                    json!({ "success": true })
-                } else {
-                    Value::Null
-                };
-                self.send(json!({ "jsonrpc": "2.0", "id": msg["id"], "result": result }))
-                    .await;
-            }
-            self.received.push(msg);
+            self.take(msg).await;
         }
+    }
+
+    /// Guarda un mensaje del servidor y, si es una petición, la contesta como un editor.
+    async fn take(&mut self, msg: Value) {
+        if msg.get("method").is_some() && msg.get("id").is_some() {
+            let result = if msg["method"] == "window/showDocument" {
+                json!({ "success": true })
+            } else {
+                Value::Null
+            };
+            self.send(json!({ "jsonrpc": "2.0", "id": msg["id"], "result": result }))
+                .await;
+        }
+        self.received.push(msg);
     }
 
     pub async fn notify(&mut self, method: &str, params: Value) {
         self.send(json!({ "jsonrpc": "2.0", "method": method, "params": params }))
             .await;
+    }
+
+    /// Si ya ha llegado la respuesta a `id`, sin esperar.
+    pub async fn answered(&mut self, id: i64) -> bool {
+        while let Ok(m) = self.rx.try_recv() {
+            self.take(m).await;
+        }
+        self.received
+            .iter()
+            .any(|m| m.get("method").is_none() && m["id"] == id)
     }
 
     pub async fn exec(&mut self, command: &str, arguments: Value) -> Value {

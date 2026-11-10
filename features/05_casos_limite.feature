@@ -101,6 +101,7 @@ Característica: Casos límite y decisiones técnicas
       Cuando completo, capturo, consulto estadísticas y genero un scaffold
       Entonces todo funciona igual
       Y molde no abre ninguna conexión de red
+      # Con MOLDE_CAPTURE_COMMAND, la red la usa ese comando, no molde. Sin red, la captura se hace por regla (ADR 0012).
 
   Regla: Snippets postfix
 

@@ -1,7 +1,7 @@
 # 0009. La regla de tres compara estructura sintáctica
 
 Fecha: 4 de noviembre de 2026
-Estado: aceptada, con revisión pendiente
+Estado: aceptada, revisada en [0013](0013-informe-con-los-candidatos-mas-repetidos.md)
 
 ## Contexto
 

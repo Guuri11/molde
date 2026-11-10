@@ -30,6 +30,8 @@ pub struct Ports {
     pub clock: Box<dyn Clock>,
     pub fs: Box<dyn FileSystem>,
     pub shell: Box<dyn Shell>,
+    /// None si no hay IA configurada: la captura generaliza por regla.
+    pub assistant: Option<Arc<dyn Assistant>>,
 }
 
 pub struct Engine {
