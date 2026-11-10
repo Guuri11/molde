@@ -24,6 +24,18 @@ Cada persona del equipo usa una herramienta distinta: Claude Code, Copilot CLI, 
 
   Las tres dejaron el caso de uso sin logs, con 3 o 4 huecos y sin los imports del dominio concreto. OpenCode necesita `-m`: con su modelo gratuito por defecto (`big-pickle`) no respondió en 120 s. Una API key es un script con `curl`. La clave nunca pasa por molde.
 
+- El tiempo lo pone el modelo, no molde. Medido el 10 de noviembre de 2026 con el mismo caso de uso: Haiku 5.5 genera 6470 tokens y 5561 son razonamiento antes de responder; el snippet son unos 900. Claude Code no deja apagarlo: con `MAX_THINKING_TOKENS=0`, `--effort low` o `alwaysThinkingEnabled: false` sigue razonando entre 4400 y 8500 tokens y tarda de 23 a 37 s. Un modelo que responde sin razonar es el que más acorta la captura:
+
+  | `MOLDE_CAPTURE_COMMAND` | Captura real |
+  |---|---|
+  | `opencode run -m github-copilot/claude-haiku-4.5 "$(cat)"` | 9 s (3 pruebas) |
+  | `opencode run -m github-copilot/mai-code-1.1-flash "$(cat)"` | 20 s |
+  | `opencode run -m github-copilot/gemini-3.8-flash "$(cat)"` | 93 s |
+
+  Los tres dieron un snippet válido. Copilot CLI no ofrece esos modelos con `--model`. Haiku 4.5 por OpenCode es el comando recomendado.
+
+  No se puede llegar a la velocidad del autocompletado de Copilot en el editor: ese modelo escribe unas pocas líneas en el cursor y las enseña según llegan, y molde necesita el snippet entero, de cientos de tokens, para validarlo.
+
 - El comando se ejecuta en una carpeta temporal vacía, no en el proyecto, con un límite de `MOLDE_CAPTURE_TIMEOUT` segundos (120 por defecto, por los 47 s de Copilot). Solo se lee la salida estándar: Copilot y OpenCode escriben sus cabeceras en la de error. Si se pasa del límite, molde termina el comando y todo lo que haya lanzado.
 - El prompt es de molde. Lleva el lenguaje, la selección, los imports que usa (tal como los calcula la ADR 0008), los contenedores del lenguaje (`queries/<lenguaje>/containers.scm`) y el formato de respuesta. Nada más del fichero. Pide un snippet lo más limpio posible: huecos para los nombres de dominio, con el mismo número donde se repiten; fuera lo concreto de este caso, como logs, comentarios y textos; la estructura intacta; `$` y `}` escapados; y solo los imports que necesita el cuerpo, sin huecos.
 - El prompt pide también que no use herramientas. El agente de OpenCode intentaba explorar la carpeta con `ls`, el permiso se le denegaba y terminaba sin responder nada.
@@ -57,7 +69,7 @@ Cada persona del equipo usa una herramienta distinta: Claude Code, Copilot CLI, 
 - Las capturas salen limpias y con nombre, prefijo, descripción y huecos con sentido.
 - La IA puede cambiar el código, y es lo que se busca. A cambio, molde ya no garantiza que expandir el snippet reproduzca la selección: solo comprueba que es un snippet válido. Un cuerpo válido pero incorrecto solo se ve al revisarlo, así que la revisión en el fichero de la ADR 0008 sigue siendo obligatoria.
 - Lo mismo con `requires`: molde comprueba que cada import es válido, no que exista ni que el cuerpo lo use.
-- Capturar tarda de 20 a 50 segundos en vez de unos milisegundos.
+- Capturar tarda de 9 a 50 segundos, según el modelo, en vez de unos milisegundos.
 - Dos capturas de la misma selección pueden dar resultados distintos. Se acepta: lo que importa es el snippet guardado.
 - La selección y sus imports salen de la máquina hacia la IA configurada. Es una decisión de cada persona al poner la variable.
 - Claude Code, Copilot CLI y OpenCode son agentes y pueden usar herramientas. La carpeta vacía evita que carguen las instrucciones del proyecto o lo toquen, pero limitar sus herramientas es cosa del comando configurado.

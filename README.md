@@ -154,7 +154,7 @@ Para que el snippet lo escriba una IA, pasa el comando al servidor con `cmd_env`
 ```lua
 vim.lsp.config("molde", {
   cmd = { "molde", "lsp" },
-  cmd_env = { MOLDE_CAPTURE_COMMAND = "claude -p --model haiku" },
+  cmd_env = { MOLDE_CAPTURE_COMMAND = 'opencode run -m github-copilot/claude-haiku-4.5 "$(cat)"' },
   -- o "copilot -s -p \"$(cat)\"", u "opencode run -m <proveedor/modelo> \"$(cat)\""
   -- …
 })

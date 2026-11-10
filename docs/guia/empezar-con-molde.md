@@ -226,14 +226,14 @@ Con la variable `MOLDE_CAPTURE_COMMAND`, molde le pasa la selección a una IA y 
    | Copilot CLI | `copilot -s -p "$(cat)"` |
    | OpenCode | `opencode run -m <proveedor/modelo> "$(cat)"` |
 
-   En OpenCode pon siempre `-m`: con el modelo gratuito por defecto no responde a tiempo.
+   El más rápido es `opencode run -m github-copilot/claude-haiku-4.5 "$(cat)"`: unos 9 segundos, frente a los 30 de Claude Code, porque responde sin razonar antes. En OpenCode pon siempre `-m`: con el modelo gratuito por defecto no responde a tiempo.
 
 2. Pásaselo al servidor en `~/.config/nvim/lua/plugins/molde.lua`:
 
    ```lua
    vim.lsp.config("molde", {
      cmd = { "molde", "lsp" },
-     cmd_env = { MOLDE_CAPTURE_COMMAND = "claude -p --model haiku" },
+     cmd_env = { MOLDE_CAPTURE_COMMAND = 'opencode run -m github-copilot/claude-haiku-4.5 "$(cat)"' },
      filetypes = { "rust", "typescript", "typescriptreact", "python" },
      root_markers = { ".molde", ".git" },
    })
@@ -241,7 +241,7 @@ Con la variable `MOLDE_CAPTURE_COMMAND`, molde le pasa la selección a una IA y 
 
 3. Captura como siempre, con **Guardar selección como snippet**.
 
-La IA tarda entre 20 y 50 segundos. Mientras tanto el editor muestra el progreso de molde y la completion sigue funcionando. Si la IA falla o tarda más de `MOLDE_CAPTURE_TIMEOUT` segundos (120 por defecto), molde captura con la regla de siempre y te avisa del motivo.
+La IA tarda de 9 a 50 segundos, según el modelo. Mientras tanto el editor muestra el progreso de molde y la completion sigue funcionando. Si la IA falla o tarda más de `MOLDE_CAPTURE_TIMEOUT` segundos (120 por defecto), molde captura con la regla de siempre y te avisa del motivo.
 
 Revisa siempre la entrada: la IA puede cambiar el código para dejarlo limpio, y molde solo comprueba que el snippet es válido, no que sea correcto. La selección y sus imports se envían a la IA que configures.
 
